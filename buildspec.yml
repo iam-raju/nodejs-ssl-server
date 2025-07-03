@@ -2,11 +2,11 @@ version: 0.2
 
 env:
   variables:
-    ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"  # Replace this
+    ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"
     IMAGE_TAG: "latest"
     EC2_USER: "ec2-user"
     EC2_HOST: "3.110.191.221"
-    SSH_KEY_SECRET_NAME: "ASJ"  # You handle this in CodeBuild env or Secrets Manager
+    EC2_SSH_PRIVATE_KEY: ""  # Set this securely in CodeBuild env vars
 
 phases:
   install:
@@ -21,7 +21,7 @@ phases:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
-      - IMAGE_URI=$ECR_REPO_URI:$IMAGE_TAG
+      - export IMAGE_URI=$ECR_REPO_URI:$IMAGE_TAG
       - echo Image URI: $IMAGE_URI
 
   build:
@@ -33,15 +33,9 @@ phases:
 
   post_build:
     commands:
-      - echo "Pushing Docker image to ECR..."
-      - docker push $ECR_REPO_URI:$IMAGE_TAG
-
       - echo "Preparing EC2 deployment..."
       - echo "$EC2_SSH_PRIVATE_KEY" > key.pem
       - chmod 400 key.pem
-
-      - EC2_HOST=3.110.191.221
-      - EC2_USER=ec2-user
 
       - echo "Connecting to EC2 instance and deploying app..."
       - >
@@ -54,4 +48,3 @@ phases:
         sudo docker pull $ECR_REPO_URI:$IMAGE_TAG &&
         sudo docker run -d --name nodeapp -p 80:3000 $ECR_REPO_URI:$IMAGE_TAG
         "
-
