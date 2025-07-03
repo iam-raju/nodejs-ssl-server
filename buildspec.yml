@@ -4,50 +4,21 @@ env:
   variables:
     ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"
     IMAGE_TAG: "latest"
-    EC2_USER: "ec2-user"
-    EC2_HOST: "3.110.191.221"
 
 phases:
-  install:
-    runtime-versions:
-      docker: 20
-    commands:
-      - echo Installing prerequisites...
-      - yum update -y
-      - yum install -y aws-cli unzip openssh
-
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
       - export IMAGE_URI=$ECR_REPO_URI:$IMAGE_TAG
-      - echo "Docker image will be: $IMAGE_URI"
 
   build:
     commands:
       - echo Building Docker image...
       - docker build -t $IMAGE_URI .
+      - echo Pushing image to ECR...
       - docker push $IMAGE_URI
 
-  post_build:
-    commands:
-      - echo "Creating key file..."
-      - |
-        cat <<EOF > key.pem
------BEGIN RSA PRIVATE KEY-----
-YOUR-ASJ-PEM-FILE-CONTENT-HERE
------END RSA PRIVATE KEY-----
-EOF
-      - chmod 400 key.pem
-
-      - echo "Deploying to EC2 instance..."
-      - |
-        ssh -o StrictHostKeyChecking=no -i key.pem $EC2_USER@$EC2_HOST << EOF
-          sudo yum install -y docker || true
-          sudo systemctl start docker
-          sudo systemctl enable docker
-          sudo docker rm -f nodeapp || true
-          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
-          sudo docker pull $IMAGE_URI
-          sudo docker run -d --name nodeapp -p 80:3000 $IMAGE_URI
-        EOF
+artifacts:
+  files:
+    - '**/*'
