@@ -14,14 +14,12 @@ phases:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
-      - |
-        echo Generating image tag...
-        GIT_SHA=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-7)
-        BUILD_TIME=$(date +%Y%m%d-%H%M)
-        IMAGE_TAG="${APP_NAME}-${ENV}-${GIT_SHA}-${BUILD_TIME}"
-        IMAGE_URI="${ECR_REPO_URI}:${IMAGE_TAG}"
-        echo "Tag: $IMAGE_TAG"
-
+      - echo Generating dynamic image tag...
+      - GIT_SHA=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c1-7)
+      - BUILD_TIME=$(date +%Y%m%d-%H%M)
+      - IMAGE_TAG="${APP_NAME}-${ENV}-${GIT_SHA}-${BUILD_TIME}"
+      - IMAGE_URI="${ECR_REPO_URI}:${IMAGE_TAG}"
+      - echo "Generated tag: $IMAGE_TAG"
 
   build:
     commands:
@@ -38,21 +36,19 @@ phases:
       - chmod 400 ec2_key.pem
       - |
         ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST << EOF
-          echo Installing Docker and AWS CLI if needed...
+          echo Installing Docker and AWS CLI...
           sudo yum update -y
           sudo yum install -y docker awscli
           sudo service docker start
-          sudo usermod -aG docker \$USER
+          sudo usermod -aG docker $USER
           newgrp docker
 
           echo Logging in to ECR...
           aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
 
-          echo Stopping and removing old container if exists...
+          echo Pulling and running container...
           docker stop $CONTAINER_NAME || true
           docker rm $CONTAINER_NAME || true
-
-          echo Pulling and running new image...
           docker pull $IMAGE_URI
           docker run -d --name $CONTAINER_NAME -p 80:3000 $IMAGE_URI
         EOF
