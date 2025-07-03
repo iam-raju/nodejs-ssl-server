@@ -2,7 +2,7 @@ version: 0.2
 
 env:
   variables:
-    ECR_REPO_URI: "<YOUR_ECR_REPO_URI>"  # Replace this
+    ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"  # Replace this
     IMAGE_TAG: "latest"
     EC2_USER: "ec2-user"
     EC2_HOST: "3.110.191.221"
