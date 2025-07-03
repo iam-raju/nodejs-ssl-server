@@ -4,6 +4,9 @@ env:
   variables:
     ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"
     IMAGE_TAG: "latest"
+    EC2_HOST: "3.110.191.221"        # <-- Replace with your EC2 IP
+    EC2_USER: "ec2-user"                    # <-- Adjust if needed (e.g., ubuntu)
+    CONTAINER_NAME: "myapp"
 
 phases:
   pre_build:
@@ -19,6 +22,17 @@ phases:
       - echo Pushing image to ECR...
       - docker push $IMAGE_URI
 
-artifacts:
-  files:
-    - '**/*'
+  post_build:
+    commands:
+      - echo Decoding SSH key...
+      - echo "$EC2_SSH_KEY" | base64 -d > ec2_key.pem
+      - chmod 400 ec2_key.pem
+      - echo Connecting to EC2 and deploying container...
+      - |
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST << EOF
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
+          docker pull $IMAGE_URI
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
+          docker run -d --name $CONTAINER_NAME -p 80:80 $IMAGE_URI
+        EOF
