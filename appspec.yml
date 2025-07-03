@@ -1,23 +1,58 @@
-version: 0.0
-os: linux
+version: 0.2
 
-files:
-  - source: /
-    destination: /home/ec2-user/app
+env:
+  variables:
+    IMAGE_TAG: "latest"
+  secrets-manager:
+    EC2_SSH_PRIVATE_KEY: "ASJ"  # Name of your Secrets Manager entry holding the EC2 key
 
-hooks:
-  BeforeInstall:
-    - location: scripts/fix_permissions.sh
-      timeout: 60
-      runas: root                # <--- CHANGE THIS LINE
-    - location: scripts/stop.sh
-      timeout: 300
-      runas: ec2-user
-    - location: scripts/install.sh
-      timeout: 300
-      runas: ec2-user
+phases:
+  pre_build:
+    commands:
+      - echo "Logging into Amazon ECR..."
+      - aws --version
+      - $(aws ecr get-login --no-include-email --region ap-south-1)
+      - echo "Setting ECR URI"
+      - ECR_REPO_URI=845091770108.dkr.ecr.ap-south-1.amazonaws.com/nodejs-ssl-server
 
-  ApplicationStart:
-    - location: scripts/start.sh
-      timeout: 300
-      runas: ec2-user
+  build:
+    commands:
+      - echo "Building Docker image..."
+      - docker build -t $ECR_REPO_URI:$IMAGE_TAG .
+      - docker tag $ECR_REPO_URI:$IMAGE_TAG $ECR_REPO_URI:$IMAGE_TAG
+
+  post_build:
+    commands:
+      - echo "Pushing Docker image to ECR..."
+      - docker push $ECR_REPO_URI:$IMAGE_TAG
+
+      - echo "Preparing EC2 deployment..."
+      - echo "$EC2_SSH_PRIVATE_KEY" > key.pem
+      - chmod 400 key.pem
+
+      - EC2_HOST=3.110.191.221
+      - EC2_USER=ec2-user
+
+      - echo "Connecting to EC2 instance and deploying app..."
+      - |
+        ssh -o StrictHostKeyChecking=no -i key.pem $EC2_USER@$EC2_HOST << EOF
+          echo "Installing Docker if needed..."
+          sudo yum install -y docker || true
+          sudo systemctl start docker
+          sudo systemctl enable docker
+
+          echo "Stopping old container if exists..."
+          sudo docker rm -f nodeapp || true
+
+          echo "Logging into ECR from EC2..."
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
+
+          echo "Pulling latest image..."
+          sudo docker pull $ECR_REPO_URI:$IMAGE_TAG
+
+          echo "Running new container..."
+          sudo docker run -d --name nodeapp -p 80:3000 $ECR_REPO_URI:$IMAGE_TAG
+        EOF
+
+artifacts:
+  files: []
