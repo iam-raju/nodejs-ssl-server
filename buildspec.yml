@@ -3,7 +3,9 @@ version: 0.2
 env:
   variables:
     ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"
-    EC2_HOST: "3.110.191.221"
+    IMAGE_TAG: "latest"
+    IMAGE_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo:latest"
+    EC2_HOST: "3.110.191.221"         # replace this
     EC2_USER: "ec2-user"
     CONTAINER_NAME: "my-app-container"
 
@@ -12,18 +14,13 @@ phases:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
-      - IMAGE_TAG=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)
-      - IMAGE_URI="$ECR_REPO_URI:$IMAGE_TAG"
-      - echo "Image Tag: $IMAGE_TAG"
 
   build:
     commands:
       - echo Building Docker image...
       - docker build -t $IMAGE_URI .
-      - docker tag $IMAGE_URI $ECR_REPO_URI:latest
-      - echo Pushing images to ECR...
+      - echo Pushing image to ECR...
       - docker push $IMAGE_URI
-      - docker push $ECR_REPO_URI:latest
 
   post_build:
     commands:
