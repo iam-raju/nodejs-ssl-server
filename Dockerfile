@@ -1,4 +1,4 @@
-FROM node:alpine
+FROM 845091770108.dkr.ecr.ap-south-1.amazonaws.com/baseimages:latest
 
 WORKDIR /nodejs-docker-aws-ecs
 
