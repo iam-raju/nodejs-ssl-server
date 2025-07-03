@@ -4,16 +4,16 @@ env:
   variables:
     ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"
     IMAGE_TAG: "latest"
-    EC2_HOST: "3.110.191.221"        # <-- Replace with your EC2 IP
-    EC2_USER: "ec2-user"                    # <-- Adjust if needed (e.g., ubuntu)
-    CONTAINER_NAME: "myapp"
+    IMAGE_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo:latest"
+    EC2_HOST: "3.110.191.221"         # replace this
+    EC2_USER: "ec2-user"
+    CONTAINER_NAME: "my-app-container"
 
 phases:
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
       - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
-      - export IMAGE_URI=$ECR_REPO_URI:$IMAGE_TAG
 
   build:
     commands:
@@ -24,15 +24,24 @@ phases:
 
   post_build:
     commands:
-      - echo Decoding SSH key...
       - echo "$EC2_SSH_KEY" | base64 -d > ec2_key.pem
       - chmod 400 ec2_key.pem
-      - echo Connecting to EC2 and deploying container...
       - |
-        ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST << EOF
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST << 'EOF'
+          echo Installing Docker and AWS CLI...
+          sudo yum update -y
+          sudo yum install -y docker awscli
+          sudo service docker start
+          sudo usermod -aG docker $USER
+          newgrp docker
+          
+          echo Logging in to ECR...
           aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
-          docker pull $IMAGE_URI
+          
+          echo Pulling and running container...
           docker stop $CONTAINER_NAME || true
           docker rm $CONTAINER_NAME || true
+          docker pull $IMAGE_URI
           docker run -d --name $CONTAINER_NAME -p 80:80 $IMAGE_URI
         EOF
+
