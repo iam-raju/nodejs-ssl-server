@@ -1,0 +1,48 @@
+
+version: 0.2
+
+env:
+  variables:
+    ECR_REPO_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo"
+    IMAGE_TAG: "latest"
+    IMAGE_URI: "845091770108.dkr.ecr.ap-south-1.amazonaws.com/cicd-new-repo:latest"
+    EC2_HOST: "3.110.191.221"         # replace this
+    EC2_USER: "ec2-user"
+    CONTAINER_NAME: "my-app-container"
+
+phases:
+  pre_build:
+    commands:
+      - echo Logging in to Amazon ECR...
+      - aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
+
+  build:
+    commands:
+      - echo Building Docker image...
+      - docker build -t $IMAGE_URI .
+      - echo Pushing image to ECR...
+      - docker push $IMAGE_URI
+
+  post_build:
+    commands:
+      - echo "$EC2_SSH_KEY" | base64 -d > ec2_key.pem
+      - chmod 400 ec2_key.pem
+      - |
+        ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST << EOF
+          echo Installing Docker and AWS CLI...
+          sudo yum update -y
+          sudo yum install -y docker awscli
+          sudo service docker start
+          sudo usermod -aG docker $USER
+          newgrp docker
+
+          echo Logging in to ECR...
+          aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REPO_URI
+
+          echo Pulling and running container...
+          docker stop $CONTAINER_NAME || true
+          docker rm $CONTAINER_NAME || true
+          docker pull $IMAGE_URI
+          docker run -d --name $CONTAINER_NAME -p 80:3000 $IMAGE_URI
+        EOF
+
